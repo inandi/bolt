@@ -1,0 +1,110 @@
+import * as vscode from "vscode";
+import * as path from "path";
+import * as os from "os";
+import * as fs from "fs";
+
+interface BoltScript {
+  alias: string;
+  path: string;
+}
+
+/**
+ * Resolves a script path from user settings to an absolute filesystem path.
+ * - Paths starting with ./ are relative to the workspace root.
+ * - Paths starting with ~ are relative to the user's home directory (Mac/Linux/Windows).
+ * - Paths starting with / (Unix) or a drive letter (Windows) are used as absolute.
+ */
+function resolveScriptPath(rawPath: string, workspaceRoot: string | undefined): string {
+  const trimmed = rawPath.trim();
+
+  if (trimmed.startsWith("~/") || trimmed === "~") {
+    const rest = trimmed === "~" ? "" : trimmed.slice(2);
+    return path.join(os.homedir(), rest);
+  }
+
+  if (trimmed.startsWith("./") || trimmed.startsWith(".\\")) {
+    const rest = trimmed.slice(2);
+    const root = workspaceRoot ?? os.homedir();
+    return path.resolve(root, rest);
+  }
+
+  if (path.isAbsolute(trimmed)) {
+    return trimmed;
+  }
+
+  const root = workspaceRoot ?? os.homedir();
+  return path.resolve(root, trimmed);
+}
+
+function getWorkspaceRoot(): string | undefined {
+  const folder = vscode.workspace.workspaceFolders?.[0];
+  return folder?.uri.fsPath;
+}
+
+function getScripts(): BoltScript[] {
+  const config = vscode.workspace.getConfiguration("bolt");
+  const scripts = config.get<BoltScript[]>("scripts") ?? [];
+  return scripts.filter((s) => typeof s?.alias === "string" && typeof s?.path === "string");
+}
+
+function runScriptInTerminal(resolvedPath: string): void {
+  const scriptDir = path.dirname(resolvedPath);
+  const quotedPath = resolvedPath.includes(" ") ? `"${resolvedPath}"` : resolvedPath;
+
+  const isWindows = process.platform === "win32";
+  const runCommand = isWindows ? quotedPath : `bash ${quotedPath}`;
+
+  const terminal = vscode.window.createTerminal({
+    cwd: scriptDir,
+    name: "Bolt",
+  });
+  terminal.show();
+  terminal.sendText(runCommand);
+}
+
+export function activate(context: vscode.ExtensionContext): void {
+  const statusBarItem = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Right,
+    100
+  );
+  statusBarItem.text = "$(zap) Bolt";
+  statusBarItem.tooltip = "Run a script from the Bolt menu";
+  statusBarItem.command = "bolt.runScripts";
+  statusBarItem.show();
+
+  const runScriptsCommand = vscode.commands.registerCommand("bolt.runScripts", async () => {
+    const scripts = getScripts();
+    if (scripts.length === 0) {
+      vscode.window.showInformationMessage(
+        "Bolt: No scripts configured. Add entries to the \"bolt.scripts\" setting."
+      );
+      return;
+    }
+
+    const chosen = await vscode.window.showQuickPick(
+      scripts.map((s) => ({ label: s.alias, script: s })),
+      {
+        placeHolder: "Select a script to run",
+        matchOnDescription: false,
+      }
+    );
+
+    if (!chosen) {
+      return;
+    }
+
+    const workspaceRoot = getWorkspaceRoot();
+    const resolvedPath = resolveScriptPath(chosen.script.path, workspaceRoot);
+
+    if (!fs.existsSync(resolvedPath)) {
+      vscode.window.showErrorMessage(`Bolt: Script not found: ${resolvedPath}`);
+      return;
+    }
+
+    runScriptInTerminal(resolvedPath);
+  });
+
+  context.subscriptions.push(statusBarItem, runScriptsCommand);
+}
+
+export function deactivate(): void {}

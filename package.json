@@ -1,0 +1,59 @@
+{
+  "name": "bolt",
+  "displayName": "Bolt",
+  "description": "Lightning-fast script launcher. Pin a Script Menu to the status bar for one-click access to your scripts.",
+  "version": "0.1.0",
+  "publisher": "bolt",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "bolt.runScripts",
+        "title": "Bolt: Run script"
+      }
+    ],
+    "configuration": {
+      "title": "Bolt",
+      "properties": {
+        "bolt.scripts": {
+          "type": "array",
+          "default": [],
+          "description": "Scripts to show in the Bolt menu. Use alias for the display name and path for the script location (e.g. ./scripts/deploy.sh or ~/scripts/backup.sh).",
+          "items": {
+            "type": "object",
+            "required": ["alias", "path"],
+            "properties": {
+              "alias": {
+                "type": "string",
+                "description": "Display name shown in the menu (e.g. \"Reset DB\", \"Deploy\")"
+              },
+              "path": {
+                "type": "string",
+                "description": "Path to the script. Use ./ for workspace-relative, ~ for home, or / for absolute."
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  }
+}
