@@ -1,8 +1,8 @@
 {
-  "name": "bolt-inandi",
-  "displayName": "Bolt",
+  "name": "bolts",
+  "displayName": "BoltS",
   "description": "Lightning-fast script launcher. Pin a Script Menu to the status bar for one-click access to your scripts.",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "publisher": "iNandi",
   "author": {
     "name": "Gobinda Nandi",
@@ -27,17 +27,17 @@
   "contributes": {
     "commands": [
       {
-        "command": "bolt.runScripts",
-        "title": "Bolt: Run script"
+        "command": "bolts.runScripts",
+        "title": "BoltS: Run script"
       }
     ],
     "configuration": {
-      "title": "Bolt",
+      "title": "BoltS",
       "properties": {
-        "bolt.scripts": {
+        "bolts.scripts": {
           "type": "array",
           "default": [],
-          "description": "Scripts to show in the Bolt menu. Use alias for the display name and path for the script location (e.g. ./scripts/deploy.sh or ~/scripts/backup.sh).",
+          "description": "Scripts to show in the BoltS menu. Use alias for the display name and path for the script location (e.g. ./scripts/deploy.sh or ~/scripts/backup.sh).",
           "items": {
             "type": "object",
             "required": ["alias", "path"],

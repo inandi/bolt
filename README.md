@@ -1,15 +1,15 @@
 <div align="center">
-  <h1>Bolt [Beta]</h1>
+  <h1>BoltS [Beta]</h1>
   <p><strong>The Lightning-Fast Script Launcher</strong></p>
 </div>
 
-Tired of memorizing script paths or switching to a terminal to run them? Bolt pins a Script Menu to your status bar—one click, pick a script by alias, and it runs in the integrated terminal.
+Tired of memorizing script paths or switching to a terminal to run them? BoltS pins a Script Menu to your status bar—one click, pick a script by alias, and it runs in the integrated terminal.
 
-## What is Bolt?
+## What is BoltS?
 
-Bolt is a VS Code extension that gives you one-click access to your shell scripts. Configure a list of scripts (with friendly aliases and paths) in settings; click **Bolt** in the status bar to open a searchable Quick Pick menu and run any script in the integrated terminal.
+BoltS is a VS Code extension that gives you one-click access to your shell scripts. Configure a list of scripts (with friendly aliases and paths) in settings; click **BoltS** in the status bar to open a searchable Quick Pick menu and run any script in the integrated terminal.
 
-## Why Use Bolt?
+## Why Use BoltS?
 
 - **Aliases**: Use names like "Reset DB" or "Deploy" instead of remembering full paths
 - **Global Access**: Run scripts outside your workspace (e.g. `~/scripts/backup.sh`) as well as project-local ones
@@ -24,23 +24,23 @@ Bolt is a VS Code extension that gives you one-click access to your shell script
 
 1. Open VS Code or Cursor
 2. Go to the Extensions view
-3. Search for **Bolt**
+3. Search for **BoltS**
 4. Click Install
 
 ### First Steps
 
-1. **Open Settings** and find **Bolt: Scripts** (`bolt.scripts`), or add to your `settings.json`:
+1. **Open Settings** and find **BoltS: Scripts** (`bolts.scripts`), or add to your `settings.json`:
 2. Add script entries with an **alias** (display name) and **path** (script location):
 
 ```json
-"bolt.scripts": [
+"bolts.scripts": [
   { "alias": "Reset DB", "path": "./scripts/reset-db.sh" },
   { "alias": "Deploy", "path": "~/scripts/deploy.sh" }
 ]
 ```
 
-3. **Click the Bolt icon** (⚡) in the status bar
-4. **Pick a script** from the Quick Pick list—it runs in a new **Bolt** terminal
+3. **Click the BoltS icon** (⚡) in the status bar
+4. **Pick a script** from the Quick Pick list—it runs in a new **BoltS** terminal
 
 ## How It Works
 
@@ -52,12 +52,12 @@ Bolt is a VS Code extension that gives you one-click access to your shell script
 
 ### Settings
 
-Configure scripts in **Bolt: Scripts** (`bolt.scripts`). Each entry has:
+Configure scripts in **BoltS: Scripts** (`bolts.scripts`). Each entry has:
 
 - **alias** – Label shown in the menu (e.g. "Reset DB", "Deploy")
 - **path** – Path to the script using the rules above
 
-If the resolved path does not exist, Bolt shows an error and does not run the script.
+If the resolved path does not exist, BoltS shows an error and does not run the script.
 
 ## Development
 
@@ -70,7 +70,7 @@ Press **F5** to launch the Extension Development Host.
 
 ## Support the Project
 
-If Bolt helps your workflow, you can support the project (no pressure):
+If BoltS helps your workflow, you can support the project (no pressure):
 
 [![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/igobinda)
 

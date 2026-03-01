@@ -1,5 +1,5 @@
 /**
- * Bolt Extension Main Module
+ * BoltS Extension Main Module
  *
  * VS Code extension for launching shell scripts from the status bar. Provides a
  * Script Menu (Quick Pick) with configurable aliases and paths. Resolves paths
@@ -17,7 +17,7 @@ import * as path from "path";
 import * as os from "os";
 import * as fs from "fs";
 
-/** Script entry from bolt.scripts setting (alias + path). */
+/** Script entry from bolts.scripts setting (alias + path). */
 interface BoltScript {
   alias: string;
   path: string;
@@ -60,10 +60,10 @@ function getWorkspaceRoot(): string | undefined {
 }
 
 /**
- * Reads and validates bolt.scripts from workspace configuration.
+ * Reads and validates bolts.scripts from workspace configuration.
  */
 function getScripts(): BoltScript[] {
-  const config = vscode.workspace.getConfiguration("bolt");
+  const config = vscode.workspace.getConfiguration("bolts");
   const scripts = config.get<BoltScript[]>("scripts") ?? [];
   return scripts.filter((s) => typeof s?.alias === "string" && typeof s?.path === "string");
 }
@@ -81,7 +81,7 @@ function runScriptInTerminal(resolvedPath: string): void {
 
   const terminal = vscode.window.createTerminal({
     cwd: scriptDir,
-    name: "Bolt",
+    name: "BoltS",
   });
   terminal.show();
   terminal.sendText(runCommand);
@@ -95,16 +95,16 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.StatusBarAlignment.Right,
     100
   );
-  statusBarItem.text = "$(zap) Bolt";
-  statusBarItem.tooltip = "Run a script from the Bolt menu";
-  statusBarItem.command = "bolt.runScripts";
+  statusBarItem.text = "$(zap) BoltS";
+  statusBarItem.tooltip = "Run a script from the BoltS menu";
+  statusBarItem.command = "bolts.runScripts";
   statusBarItem.show();
 
-  const runScriptsCommand = vscode.commands.registerCommand("bolt.runScripts", async () => {
+  const runScriptsCommand = vscode.commands.registerCommand("bolts.runScripts", async () => {
     const scripts = getScripts();
     if (scripts.length === 0) {
       vscode.window.showInformationMessage(
-        "Bolt: No scripts configured. Add entries to the \"bolt.scripts\" setting."
+        "BoltS: No scripts configured. Add entries to the \"bolts.scripts\" setting."
       );
       return;
     }
@@ -125,7 +125,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const resolvedPath = resolveScriptPath(chosen.script.path, workspaceRoot);
 
     if (!fs.existsSync(resolvedPath)) {
-      vscode.window.showErrorMessage(`Bolt: Script not found: ${resolvedPath}`);
+      vscode.window.showErrorMessage(`BoltS: Script not found: ${resolvedPath}`);
       return;
     }
 
