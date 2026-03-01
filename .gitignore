@@ -44,3 +44,4 @@ dev.md
 
 # Publishing secrets
 .publish-secrets
+.cursor/**
