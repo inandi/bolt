@@ -1,5 +1,5 @@
 <div align="center">
-  <h1>BoltS [Beta]</h1>
+  <h1>BoltS [Beta/wave-2]</h1>
   <p><strong>The Lightning-Fast Script Launcher</strong></p>
 </div>
 
