@@ -8,294 +8,17 @@
  *
  * @author Gobinda Nandi <gobinda.nandi.public@gmail.com>
  * @since 1.1.2 [01-03-2026]
- * @version 2.1.1
+ * @version 2.1.2
  * @copyright (c) 2026 Gobinda Nandi
  */
 
 import * as vscode from "vscode";
-import * as path from "path";
-import * as os from "os";
 import * as fs from "fs";
-
-/** Shell identifier: which terminal/shell to run the script in. */
-export type ShellId = "os" | "powershell" | "cmd" | "bash" | "gitbash" | "wsl" | "sh";
-
-/** Platform-specific overrides (path, args, shell) for a script. */
-interface BoltScriptPlatform {
-  path?: string;
-  args?: string;
-  shell?: ShellId;
-}
-
-/** Script entry from bolts.scripts setting (alias, path, optional args, shell, OS overrides). */
-interface BoltScript {
-  alias: string;
-  path: string;
-  /** Optional arguments passed to the script (e.g. "--ABCD 1"). */
-  args?: string;
-  /** Which shell/terminal to run in. "os" = use default per OS. */
-  shell?: ShellId;
-  /** Overrides when running on Windows. */
-  windows?: BoltScriptPlatform;
-  /** Overrides when running on Linux. */
-  linux?: BoltScriptPlatform;
-  /** Overrides when running on macOS. */
-  darwin?: BoltScriptPlatform;
-}
-
-/** Resolved script for the current OS: path, args, and shell to use. */
-interface ResolvedScript {
-  path: string;
-  args: string | undefined;
-  shell: ShellId;
-}
-
-/** Where to read scripts from: effective (default), user (global), or workspace (project). */
-type ConfigScope = "effective" | "user" | "workspace";
-
-/** Current OS key for platform overrides. */
-const PLATFORM_KEY = process.platform === "win32" ? "windows" : process.platform === "darwin" ? "darwin" : "linux";
-
-const IS_WINDOWS = process.platform === "win32";
-
-/**
- * Converts a Windows path to a WSL path (e.g. C:\foo\bar -> /mnt/c/foo/bar).
- * Paths already starting with / (WSL-style) are returned as-is. Handles \\wsl$\...
- */
-function windowsPathToWslPath(windowsPath: string): string {
-  const normalized = path.normalize(windowsPath).replace(/\\/g, "/");
-  if (normalized.startsWith("/")) {
-    return normalized;
-  }
-  const wslPrefix = "/mnt/";
-  const driveMatch = normalized.match(/^([A-Za-z]):\/(.*)$/);
-  if (driveMatch) {
-    const letter = driveMatch[1].toLowerCase();
-    const rest = driveMatch[2] || "";
-    return `${wslPrefix}${letter}/${rest}`;
-  }
-  if (normalized.match(/^\/\/wsl(\$|\.localhost)/i)) {
-    const rest = normalized.replace(/^\/\/wsl\$\/[^/]+/i, "").replace(/^\/\/wsl\.localhost\/[^/]+/i, "").replace(/\\/g, "/");
-    return rest.startsWith("/") ? rest : `/${rest}`;
-  }
-  return normalized.replace(/\\/g, "/");
-}
-
-/**
- * Resolves a script path from user settings to an absolute filesystem path.
- * - Paths starting with ./ are relative to the workspace root.
- * - Paths starting with ~ are relative to the user's home directory (Mac/Linux/Windows).
- * - Paths starting with / (Unix) or a drive letter (Windows) are used as absolute.
- * 
- */
-function resolveScriptPath(rawPath: string, workspaceRoot: string | undefined): string {
-  const trimmed = rawPath.trim();
-
-  if (trimmed.startsWith("~/") || trimmed === "~") {
-    const rest = trimmed === "~" ? "" : trimmed.slice(2);
-    return path.join(os.homedir(), rest);
-  }
-
-  if (trimmed.startsWith("./") || trimmed.startsWith(".\\")) {
-    const rest = trimmed.slice(2);
-    const root = workspaceRoot ?? os.homedir();
-    return path.resolve(root, rest);
-  }
-
-  if (path.isAbsolute(trimmed)) {
-    return trimmed;
-  }
-
-  const root = workspaceRoot ?? os.homedir();
-  return path.resolve(root, trimmed);
-}
-
-/**
- * Returns the first workspace folder path, or undefined if no folder is open.
- */
-function getWorkspaceRoot(): string | undefined {
-  const folder = vscode.workspace.workspaceFolders?.[0];
-  return folder?.uri.fsPath;
-}
-
-/**
- * Returns the scripts array for the given scope (from config.inspect).
- */
-function getScriptsForScope(config: vscode.WorkspaceConfiguration, scope: ConfigScope): BoltScript[] {
-  if (scope === "effective") {
-    const scripts = config.get<BoltScript[]>("scripts") ?? [];
-    return scripts.filter((s) => typeof s?.alias === "string" && typeof s?.path === "string");
-  }
-  const inspected = config.inspect<BoltScript[]>("scripts");
-  if (!inspected) {
-    return [];
-  }
-  let raw: BoltScript[] | undefined;
-  if (scope === "user") {
-    raw = inspected.globalValue;
-  } else {
-    raw = inspected.workspaceFolderValue ?? inspected.workspaceValue;
-  }
-  const scripts = raw ?? [];
-  return scripts.filter((s) => typeof s?.alias === "string" && typeof s?.path === "string");
-}
-
-/**
- * Reads and validates bolts.scripts using the configured scope (global / project / effective).
- */
-function getScripts(): BoltScript[] {
-  const config = vscode.workspace.getConfiguration("bolts");
-  const scope = (config.get<ConfigScope>("configScope") ?? "effective") as ConfigScope;
-  return getScriptsForScope(config, scope);
-}
-
-/**
- * Returns the ConfigurationTarget for the given scope (for config.update).
- */
-function getConfigTarget(scope: "user" | "workspace"): vscode.ConfigurationTarget {
-  return scope === "user" ? vscode.ConfigurationTarget.Global : vscode.ConfigurationTarget.Workspace;
-}
-
-/**
- * Resolves a script for the current OS: applies platform overrides (windows/linux/darwin)
- * and returns path (resolved to absolute), args, and shell. Path in result is still raw
- * for the current platform (will be resolved to absolute when running).
- */
-function resolveScriptForOS(
-  script: BoltScript,
-  workspaceRoot: string | undefined,
-  defaultShell: ShellId
-): ResolvedScript {
-  const plat = script[PLATFORM_KEY as keyof BoltScript] as BoltScriptPlatform | undefined;
-  const rawPath = plat?.path ?? script.path;
-  const rawArgs = plat?.args ?? script.args;
-  const scriptShell = plat?.shell ?? script.shell ?? "os";
-
-  const effectiveShell: ShellId =
-    scriptShell === "os"
-      ? defaultShell === "os"
-        ? process.platform === "win32"
-          ? "powershell"
-          : "bash"
-        : defaultShell
-      : scriptShell;
-
-  return {
-    path: rawPath,
-    args: rawArgs?.trim() || undefined,
-    shell: effectiveShell,
-  };
-}
-
-/**
- * Resolves script path to absolute and returns full ResolvedScript with absolute path.
- */
-function resolveScriptForRun(
-  script: BoltScript,
-  workspaceRoot: string | undefined,
-  defaultShell: ShellId
-): ResolvedScript & { resolvedPath: string } {
-  const resolved = resolveScriptForOS(script, workspaceRoot, defaultShell);
-  const resolvedPath = resolveScriptPath(resolved.path, workspaceRoot);
-  return { ...resolved, resolvedPath };
-}
-
-/** Returns terminal shellPath and shellArgs for the given shell type and OS. */
-function getTerminalShellOptions(
-  shellId: ShellId,
-  wslDistro?: string
-): { shellPath: string; shellArgs: string[] } {
-  const isWin = process.platform === "win32";
-  switch (shellId) {
-    case "powershell":
-      return { shellPath: "powershell.exe", shellArgs: ["-NoProfile", "-ExecutionPolicy", "Bypass"] };
-    case "cmd":
-      return { shellPath: "cmd.exe", shellArgs: [] };
-    case "bash":
-      return { shellPath: isWin ? "bash.exe" : "bash", shellArgs: [] };
-    case "gitbash":
-      return {
-        shellPath: isWin
-          ? path.join(process.env["ProgramFiles"] || "C:\\Program Files", "Git", "bin", "bash.exe")
-          : "bash",
-        shellArgs: [],
-      };
-    case "wsl": {
-      const args = wslDistro?.trim() ? ["-d", wslDistro.trim()] : [];
-      return { shellPath: "wsl.exe", shellArgs: args };
-    }
-    case "sh":
-      return { shellPath: "sh", shellArgs: [] };
-    case "os":
-    default:
-      return isWin
-        ? { shellPath: "powershell.exe", shellArgs: ["-NoProfile", "-ExecutionPolicy", "Bypass"] }
-        : { shellPath: "bash", shellArgs: [] };
-  }
-}
-
-/**
- * Builds the command string to send to the terminal for the given shell type.
- * Path is absolute; args are appended. Quoting and invocation style are shell-specific.
- * For WSL, converts Windows path to WSL path and runs in script dir so cwd is correct.
- */
-function buildRunCommand(
-  shellId: ShellId,
-  resolvedPath: string,
-  args: string | undefined,
-  scriptDir: string
-): string {
-  const quotedPath = resolvedPath.includes(" ") ? `"${resolvedPath}"` : resolvedPath;
-  const argsPart = args?.trim() ? ` ${args.trim()}` : "";
-  const isWin = process.platform === "win32";
-
-  switch (shellId) {
-    case "powershell":
-      return `& '${resolvedPath.replace(/'/g, "''")}'${argsPart}`;
-    case "cmd":
-      return `${quotedPath}${argsPart}`;
-    case "wsl": {
-      const wslPath = windowsPathToWslPath(resolvedPath);
-      const wslDir = windowsPathToWslPath(scriptDir);
-      const quotedWslPath = wslPath.includes(" ") || wslPath.includes("'") ? `"${wslPath.replace(/"/g, '\\"')}"` : wslPath;
-      const quotedWslDir = wslDir.includes(" ") || wslDir.includes("'") ? `"${wslDir.replace(/"/g, '\\"')}"` : wslDir;
-      return `cd ${quotedWslDir} && ${quotedWslPath}${argsPart}`;
-    }
-    case "bash":
-    case "gitbash":
-    case "sh":
-      return `${quotedPath}${argsPart}`;
-    case "os":
-    default:
-      return isWin ? `${quotedPath}${argsPart}` : `${quotedPath}${argsPart}`;
-  }
-}
-
-/**
- * Creates an integrated terminal with the chosen shell, sets cwd to the script directory,
- * and runs the script with optional args. Shell type controls PowerShell, cmd, bash, WSL, etc.
- * When shell is WSL, uses bolts.wslDistro if set and converts paths to WSL form.
- */
-function runScriptInTerminal(
-  resolvedPath: string,
-  args: string | undefined,
-  shellId: ShellId,
-  wslDistro?: string
-): void {
-  const scriptDir = path.dirname(resolvedPath);
-  const { shellPath, shellArgs } = getTerminalShellOptions(shellId, wslDistro);
-  const runCommand = buildRunCommand(shellId, resolvedPath, args, scriptDir);
-
-  const cwd = shellId === "wsl" && IS_WINDOWS ? windowsPathToWslPath(scriptDir) : scriptDir;
-  const terminal = vscode.window.createTerminal({
-    cwd,
-    name: "BoltS",
-    shellPath,
-    shellArgs: shellArgs.length > 0 ? shellArgs : undefined,
-  });
-  terminal.show();
-  terminal.sendText(runCommand);
-}
+import type { ShellId, BoltScript } from "./types";
+import { getWorkspaceRoot, getScriptsForScope, getScripts, getConfigTarget } from "./config";
+import { resolveScriptForRun } from "./resolve";
+import { runScriptInTerminal } from "./terminal";
+import { pickScriptPath } from "./pickScriptPath";
 
 /**
  * Activates the extension: creates the status bar item and registers the run-scripts command.
@@ -310,6 +33,13 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBarItem.command = "bolts.openMenu";
   statusBarItem.show();
 
+  /**
+   * Main BoltS menu entrypoint. Shows a small Quick Pick with "Run script",
+   * "Add script", and "Manage scripts", then delegates to the chosen command.
+   *
+   * @since 2.1.2 [02-03-2026]
+   * @version 2.1.2
+   */
   const openMenuCommand = vscode.commands.registerCommand("bolts.openMenu", async () => {
     const scripts = getScripts();
     const items: vscode.QuickPickItem[] = [];
@@ -336,6 +66,15 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   });
 
+  /**
+   * Interactive flow for adding a new script:
+   * 1) Ask for an alias, 2) let the user pick a path (or enter one),
+   * 3) optionally collect args and shell, 4) choose user/workspace scope,
+   * 5) append to the appropriate bolts.scripts array.
+   *
+   * @since 2.1.2 [02-03-2026]
+   * @version 2.1.2
+   */
   const addScriptCommand = vscode.commands.registerCommand("bolts.addScript", async () => {
     const alias = await vscode.window.showInputBox({
       title: "BoltS: Add script",
@@ -346,14 +85,8 @@ export function activate(context: vscode.ExtensionContext): void {
     if (alias === undefined || !alias.trim()) {
       return;
     }
-    const scriptPath = await vscode.window.showInputBox({
-      title: "BoltS: Add script",
-      prompt: "Path: use ./ for workspace-relative, ~ for home, or absolute path",
-      placeHolder: "./scripts/run.sh",
-      value: "./",
-      validateInput: (v) => (!v?.trim() ? "Enter a path" : undefined),
-    });
-    if (scriptPath === undefined || !scriptPath.trim()) {
+    const scriptPath = await pickScriptPath();
+    if (!scriptPath) {
       return;
     }
     const scriptArgs = await vscode.window.showInputBox({
@@ -406,6 +139,13 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.showInformationMessage(`BoltS: Added "${newScript.alias}" to ${target.target} settings.`);
   });
 
+  /**
+   * "Manage scripts" flow for editing or deleting configured scripts in either
+   * user or workspace scope. Lets the user pick a script, then choose Edit/Delete.
+   *
+   * @since 2.1.2 [02-03-2026]
+   * @version 2.1.2
+   */
   const manageScriptsCommand = vscode.commands.registerCommand("bolts.manageScripts", async () => {
     const config = vscode.workspace.getConfiguration("bolts");
     const target = await vscode.window.showQuickPick(
@@ -506,6 +246,15 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.showInformationMessage(`BoltS: Updated "${chosen.script.alias}" in ${target.scope} settings.`);
   });
 
+  /**
+   * Runs a configured script:
+   * - Shows a list of aliases to choose from.
+   * - Resolves configuration, path, and shell for the current OS.
+   * - Verifies the script exists and launches it in a BoltS terminal.
+   *
+   * @since 2.1.2 [02-03-2026]
+   * @version 2.1.2
+   */
   const runScriptsCommand = vscode.commands.registerCommand("bolts.runScripts", async () => {
     const scripts = getScripts();
     if (scripts.length === 0) {
