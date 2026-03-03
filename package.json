@@ -2,7 +2,7 @@
   "name": "bolts",
   "displayName": "BoltS",
   "description": "Lightning-fast script launcher. Pin a Script Menu to the status bar for one-click access to your scripts.",
-  "version": "2.1.4",
+  "version": "2.1.5",
   "publisher": "iNandi",
   "author": {
     "name": "Gobinda Nandi",
@@ -12,7 +12,7 @@
   "icon": "media/logo.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/iNandi/bolt"
+    "url": "https://github.com/iNandi/bolts"
   },
   "engines": {
     "vscode": "^1.74.0"
